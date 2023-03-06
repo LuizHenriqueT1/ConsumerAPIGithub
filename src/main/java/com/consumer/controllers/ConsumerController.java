@@ -18,17 +18,20 @@ public class ConsumerController {
     private ConsumerService consumerService;
 
     @GetMapping()
+    @CrossOrigin(origins = "*")
     public ResponseEntity<List<ConsumerUser>> consumeAllUsers(@RequestParam("since") Integer number, @RequestParam("per_page") Integer perPage) {
         List<ConsumerUser> consumerUser = consumerService.consumeAllUsers(number, perPage);
         return new ResponseEntity<List<ConsumerUser>>(consumerUser, HttpStatus.OK);
     }
 
     @GetMapping(value = "/{username}/details" )
+    @CrossOrigin(origins = "*")
     public ResponseEntity<ConsumerUser> consumeUserDetails(@PathVariable("username") String username) {
         ConsumerUser consumerUser = consumerService.consumeUserDetails(username);
         return new ResponseEntity<ConsumerUser>(consumerUser, HttpStatus.OK);
     }
     @GetMapping(value = "/{username}/repos")
+    @CrossOrigin(origins = "*")
     public ResponseEntity<List<ConsumerRepository>> consumeAllUserRepositories(
             @PathVariable("username") String username, @RequestParam("page") Integer page, @RequestParam("per_page") Integer perPage) {
         List<ConsumerRepository> consumerRepository = consumerService.consumeAllUserRepositories(username, page, perPage);
