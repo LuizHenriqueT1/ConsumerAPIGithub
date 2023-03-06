@@ -1,95 +1,132 @@
 package com.consumer.services;
 
+import com.consumer.WireMockConfiguration;
 import com.consumer.domain.ConsumerRepository;
 import com.consumer.domain.ConsumerUser;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.github.tomakehurst.wiremock.WireMockServer;
+import com.github.tomakehurst.wiremock.client.MappingBuilder;
+import com.github.tomakehurst.wiremock.client.WireMock;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.Arguments;
-import org.junit.jupiter.params.provider.CsvSource;
-import org.junit.jupiter.params.provider.MethodSource;
-import org.junit.jupiter.params.provider.ValueSource;
-import org.mockito.InjectMocks;
+import org.junit.jupiter.api.Test;
 import org.mockito.MockitoAnnotations;
-import org.springframework.boot.test.web.client.TestRestTemplate;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.test.context.junit.jupiter.SpringJUnitConfig;
+import org.springframework.web.client.RestTemplate;
 
 import java.util.List;
-import java.util.stream.Stream;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.options;
+import static org.assertj.core.api.AssertionsForInterfaceTypes.assertThat;
 
+
+@SpringJUnitConfig
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class ConsumerServiceTest {
 
-    @InjectMocks
-    private ConsumerService service;
+    @LocalServerPort
+    private int serverPort;
 
-    private final TestRestTemplate restTemplate = new TestRestTemplate();
+    private WireMockServer wireMockServer;
+
+    @Autowired
+    private RestTemplateBuilder restTemplateBuilder;
+
+    private RestTemplate restTemplate;
 
     @BeforeEach
     void setUp() {
         MockitoAnnotations.openMocks(this);
+        restTemplate = new RestTemplate();
+        wireMockServer = new WireMockServer(options().dynamicPort());
+        wireMockServer.start();
+        WireMock.configureFor(wireMockServer.port());
+
+        restTemplate = restTemplateBuilder.rootUri("http://localhost:" + serverPort).build();
     }
 
-    @ParameterizedTest
-    @CsvSource({
-            "0, 10",
-            "10, 15",
-            "20, 50"
-    })
-    void  whenRequestFindAllUserThenReturnListOfConsumerUser(Integer since, Integer perPage) {
-        List<ConsumerUser> userList = service.consumeAllUsers(since, perPage);
-
-        String url = "https://api.github.com/users?since=" + since + "&per_page=" + perPage;
-        ResponseEntity<List<ConsumerUser>> responseEntity = restTemplate.exchange(url, HttpMethod.GET, null, new ParameterizedTypeReference<List<ConsumerUser>>() {});
-
-        assertEquals(HttpStatus.OK, responseEntity.getStatusCode());
-        assertNotNull(responseEntity.getBody());
-        assertEquals(userList.size(), responseEntity.getBody().size());
+    @AfterEach
+    void tearDown() {
+        wireMockServer.stop();
     }
 
-    @ParameterizedTest
-    @ValueSource(strings = {
-            "user1",
-            "user2",
-            "user3"
-    })
-    void whenRequestUserDetailsThenReturnConsumerUser(String username) {
-        ConsumerUser userDetails = service.consumeUserDetails(username);
 
-        String url = "https://api.github.com/users/"+username;
-        ResponseEntity<ConsumerUser> responseEntity = restTemplate.exchange(url, HttpMethod.GET, null, new ParameterizedTypeReference<ConsumerUser>(){});
+    @Test
+    public void  whenRequestFindAllUserThenReturnListOfConsumerUser() throws JsonProcessingException {
+        Integer since = 0;
+        Integer perPage = 10;
+        // Configurando a resposta simulada do WireMock
+        WireMockConfiguration.setListOfUserData();
+        String responseBody = WireMockConfiguration.getResponseBody();
+        MappingBuilder mappingBuilder = WireMockConfiguration.configureGetRequest(
+                "/users?since=" + since + "&per_page=" + perPage, 200, responseBody);
+        WireMock.stubFor(mappingBuilder);
 
-        assertEquals(HttpStatus.OK, responseEntity.getStatusCode());
-        assertEquals(username, responseEntity.getBody().getLogin());
-        assertNotNull(responseEntity.getBody());
-        assertNotNull(responseEntity.getBody().getId());
-        assertNotNull(responseEntity.getBody().getLogin());
-        assertNotNull(responseEntity.getBody().getHtml_url());
-        assertNotNull(responseEntity.getBody().getPublic_repos());
-        assertNotNull(responseEntity.getBody().getCreated_at());
+        String url = "http://localhost:" + wireMockServer.port() + "/users?since=" + since + "&per_page=" + perPage;
+        ResponseEntity<List<ConsumerUser>> responseEntity = restTemplate.exchange(
+                url, HttpMethod.GET, null, new ParameterizedTypeReference<List<ConsumerUser>>() {});
+
+        assertThat(responseEntity.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(responseEntity.getBody()).isNotNull();
+        assertThat(responseEntity.getBody()).isNotEmpty();
+        assertThat(responseEntity.getHeaders().containsValue("Content-Type"));
+        assertThat(responseEntity.getHeaders().containsValue("application/json"));
     }
 
-    @ParameterizedTest
-    @MethodSource("parameterforUrlConsumeAllUserRepositories")
-    void whenRequestAllUserRepositoriesThenReturnListOfConsumerRepository(String username, Integer page, Integer perPage) {
-        List<ConsumerRepository> listUserRepositories = service.consumeAllUserRepositories(username, page, perPage);
-        String url = "https://api.github.com/users/" +username+"/repos?page=" +page+ "&per_page=" +perPage;
-        ResponseEntity<List<ConsumerRepository>> responseEntity = restTemplate.exchange(url, HttpMethod.GET, null, new ParameterizedTypeReference<List<ConsumerRepository>>(){});
+    @Test
+    public void whenRequestUserDetailsThenReturnConsumerUser() throws JsonProcessingException {
+        // configuração da resposta simulada do Wiremock
+        ConsumerUser user = new ConsumerUser();
+        WireMockConfiguration.setUserData();
+        String responseBody = WireMockConfiguration.getResponseBody();
+        MappingBuilder mappingBuilder = WireMockConfiguration.configureGetRequest(
+                "/users/" + user.getLogin(), 200, responseBody);
+        WireMock.stubFor(mappingBuilder);
 
-        assertEquals(HttpStatus.OK, responseEntity.getStatusCode());
-        assertNotNull(responseEntity.getBody());
-        assertEquals(listUserRepositories.size(), responseEntity.getBody().size());
+        // realiza a solitação HTTP para URL simulada
+        String url = "http://localhost:" + wireMockServer.port() + "/users/" + user.getLogin();
+        ResponseEntity<ConsumerUser> responseEntity = restTemplate.exchange(url, HttpMethod.GET, null,
+                new ParameterizedTypeReference<ConsumerUser>() {});
+
+        assertThat(responseEntity.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(responseEntity.getBody()).isNotNull();
+        assertThat(responseEntity.getHeaders().containsValue("Content-Type"));
+        assertThat(responseEntity.getHeaders().containsValue("application/json"));
+        assertThat(responseEntity.getBody().getId()).isNotNull();
+        assertThat(responseEntity.getBody().getLogin()).isNotNull();
+        assertThat(responseEntity.getBody().getHtml_url()).isNotNull();
+        assertThat(responseEntity.getBody().getPublic_repos()).isNotNull();
+        assertThat(responseEntity.getBody().getCreated_at()).isNotNull();
     }
 
-    static Stream<Arguments> parameterforUrlConsumeAllUserRepositories() {
-        return Stream.of(
-                Arguments.of("user1", 1, 10),
-                Arguments.of("user1", 2, 20),
-                Arguments.of("user2", 3, 10)
-        );
+    @Test
+    public void whenRequestUserRepositoriesThenReturnListConsumerRepository() throws JsonProcessingException {
+        String username = "mojanbo";
+        Integer page = 1;
+        Integer perPage = 10;
+
+        WireMockConfiguration.setListUserRepositories();
+        String responseBody = WireMockConfiguration.getResponseBody();
+        MappingBuilder mappingBuilder = WireMockConfiguration.configureGetRequest(
+                "/users/"+username+"/repos?page="+page+"&per_page="+perPage, 200, responseBody);
+        WireMock.stubFor(mappingBuilder);
+
+        String url = "http://localhost:" + wireMockServer.port() + "/users/"+username+"/repos?page="+page+"&per_page="+perPage;
+        ResponseEntity<List<ConsumerRepository>> responseEntity = restTemplate.exchange(
+                url, HttpMethod.GET, null, new ParameterizedTypeReference<List<ConsumerRepository>>() {});
+
+        assertThat(responseEntity.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(responseEntity.getBody()).isNotNull();
+        assertThat(responseEntity.getBody()).isNotEmpty();
+        assertThat(responseEntity.getHeaders().containsValue("Content-Type"));
+        assertThat(responseEntity.getHeaders().containsValue("application/json"));
     }
 }

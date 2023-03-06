@@ -10,6 +10,9 @@ public class ConsumerRepository implements Serializable {
     private String name;
     private String html_url;
 
+    public ConsumerRepository() {
+    }
+
     public float getId() {
         return id;
     }

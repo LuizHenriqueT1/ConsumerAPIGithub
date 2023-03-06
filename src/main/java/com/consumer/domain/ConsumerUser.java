@@ -1,15 +1,20 @@
 package com.consumer.domain;
 
+
 import java.io.Serializable;
 
 public class ConsumerUser implements Serializable {
 	
 	private static final long serialVersionUID = 1L;
+
 	private float id;
 	private String login;
 	private String html_url;
 	private float public_repos;
 	private String created_at;
+
+	public ConsumerUser() {
+	}
 
 	public String getLogin() {
 		return login;
